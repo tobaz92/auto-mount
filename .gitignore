@@ -1,0 +1,17 @@
+.DS_Store
+build/
+main
+.claude/
+*.icns
+AppIcon.iconset/
+
+# Secrets & credentials
+*.env
+*.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+credentials*
+secrets*
