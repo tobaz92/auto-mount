@@ -3,6 +3,7 @@
 
 APP_NAME="AutoMount"
 BUILD_DIR="build"
+INSTALL_DIR="$HOME/Applications"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 MACOS_DIR="$APP_BUNDLE/Contents/MacOS"
 PLIST_DIR="$APP_BUNDLE/Contents"
@@ -100,9 +101,26 @@ fi
 
 echo ""
 echo "Build réussi : $APP_BUNDLE"
-echo ""
-echo "Pour lancer :"
-echo "  open $APP_BUNDLE"
-echo ""
-echo "Pour installer dans Applications :"
-echo "  cp -r $APP_BUNDLE ~/Applications/"
+
+if [ "$1" != "--install" ]; then
+    echo ""
+    echo "Pour lancer :"
+    echo "  open $APP_BUNDLE"
+    echo ""
+    echo "Pour installer dans $INSTALL_DIR et relancer :"
+    echo "  ./build.sh --install"
+    exit 0
+fi
+
+# L'app tourne en agent : sans arrêt préalable, le cp écrase un bundle en
+# cours d'exécution et laisse l'ancienne version en mémoire.
+INSTALLED="$INSTALL_DIR/$APP_NAME.app"
+pkill -f "$APP_NAME.app/Contents/MacOS/$APP_NAME"
+sleep 1
+
+mkdir -p "$INSTALL_DIR"
+rm -rf "$INSTALLED"
+cp -R "$APP_BUNDLE" "$INSTALLED" || { echo "Installation échouée."; exit 1; }
+
+echo "Installé : $INSTALLED"
+open "$INSTALLED" && echo "Relancé depuis $INSTALL_DIR."

@@ -16,11 +16,23 @@ xcode-select --install   # si pas deja fait
 open build/AutoMount.app
 ```
 
+Pour installer dans ~/Applications et relancer l'app en une commande :
+
+```
+./build.sh --install
+```
+
 macOS 13 minimum.
 
 ## Setup
 
-Clic sur l'icone dans la barre de menu > Reglages. Coller l'URL SMB, donner un nom, +, sauvegarder. La premiere fois macOS demande le mot de passe — cocher "se souvenir dans le trousseau" et c'est regle.
+Clic sur l'icone dans la barre de menu > Reglages. Coller l'URL SMB, donner un nom, +, sauvegarder.
+
+L'app monte en mode silencieux : elle ne peut afficher aucune fenetre, donc
+elle ne demandera jamais de mot de passe. Le partage doit deja etre dans le
+Trousseau. Si ce n'est pas le cas, le monter une fois depuis le Finder (Cmd+K,
+coller l'URL, cocher "se souvenir dans le trousseau") — l'app prend le relais
+ensuite.
 
 ## Licence
 
