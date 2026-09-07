@@ -17,6 +17,7 @@ swiftc -O -swift-version 5 \
     -o "$MACOS_DIR/$APP_NAME" \
     AutoMount.swift \
     -framework AppKit \
+    -framework NetFS \
     -framework ServiceManagement
 
 if [ $? -ne 0 ]; then
@@ -69,8 +70,6 @@ cat > "$ENTITLEMENTS" << 'ENT'
     <key>com.apple.security.network.client</key>
     <true/>
     <key>com.apple.security.files.user-selected.read-write</key>
-    <true/>
-    <key>com.apple.security.automation.apple-events</key>
     <true/>
 </dict>
 </plist>

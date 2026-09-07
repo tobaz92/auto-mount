@@ -1,4 +1,5 @@
 import AppKit
+import NetFS
 import ServiceManagement
 import UserNotifications
 
@@ -83,17 +84,34 @@ class MountManager {
         return output.components(separatedBy: "\n").contains { $0.contains(needle) }
     }
 
+    /// macOS attend `-W` en millisecondes, contrairement à Linux.
+    private let pingTimeoutMillis = "1500"
+
     func isReachable(_ share: NASShare) -> Bool {
-        runProcess("/sbin/ping", args: ["-c1", "-W2", share.host]) != "error"
+        runProcess("/sbin/ping", args: ["-c1", "-W", pingTimeoutMillis, share.host]) != "error"
     }
 
     func isSMBOpen(_ share: NASShare) -> Bool {
         runProcess("/usr/bin/nc", args: ["-z", "-w2", share.host, "445"]) != "error"
     }
 
-    func mount(_ share: NASShare) {
-        let escaped = share.url.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        runProcess("/usr/bin/osascript", args: ["-e", "mount volume \"\(escaped)\""])
+    /// `mount volume` d'AppleScript passe par NetAuthAgent en mode interactif : le
+    /// moindre échec ouvre un dialogue Finder. NetFS en NoUI n'affiche jamais rien,
+    /// y compris pour demander des identifiants absents du trousseau.
+    @discardableResult
+    func mount(_ share: NASShare) -> Int32 {
+        guard let url = URL(string: share.url) else { return -1 }
+        let openOptions = NSMutableDictionary()
+        openOptions[kNAUIOptionKey as String] = kNAUIOptionNoUI as String
+        var mountpoints: Unmanaged<CFArray>?
+        let status = NetFSMountURLSync(url as CFURL, nil, nil, nil,
+                                       unsafeBitCast(openOptions, to: CFMutableDictionary.self),
+                                       nil, &mountpoints)
+        mountpoints?.release()
+        if status != 0 {
+            NSLog("AutoMount: montage de %@ refusé — code %d", share.name, status)
+        }
+        return status
     }
 
     func unmount(_ share: NASShare) {
@@ -104,13 +122,7 @@ class MountManager {
         guard share.isValid else { return false }
         if isMounted(share) { return true }
         guard isReachable(share), isSMBOpen(share) else { return false }
-        mount(share)
-        // mount volume est asynchrone, attendre que macOS termine le montage
-        for _ in 0..<5 {
-            Thread.sleep(forTimeInterval: 1)
-            if isMounted(share) { return true }
-        }
-        return false
+        return mount(share) == 0 && isMounted(share)
     }
 
     func notifyIfChanged(share: NASShare, connected: Bool) {
@@ -124,6 +136,12 @@ class MountManager {
             let body = connected ? "Monté sur \(share.mountPoint)" : "Le partage n'est plus disponible"
             sendNotification(title: title, body: body, identifier: share.id.uuidString)
         }
+    }
+
+    func notifyUnreachable(_ share: NASShare) {
+        sendNotification(title: "\(share.name) injoignable",
+                         body: "\(share.host) ne répond pas — montage annulé",
+                         identifier: share.id.uuidString)
     }
 
     func cleanupStates(activeIds: Set<UUID>) {
@@ -679,8 +697,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func mountAction(_ sender: NSMenuItem) {
         guard let share = shareFromSender(sender) else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            MountManager.shared.mount(share)
-            let mounted = MountManager.shared.isMounted(share)
+            let manager = MountManager.shared
+            // Sans ce filtre, NetFS bloque jusqu'à son timeout de 60 s sur un NAS
+            // éteint, et l'UI d'authentification remonte un dialogue d'erreur.
+            guard manager.isReachable(share), manager.isSMBOpen(share) else {
+                manager.notifyUnreachable(share)
+                DispatchQueue.main.async {
+                    self?.shareStates[share.id] = false
+                    self?.refreshUI()
+                }
+                return
+            }
+            manager.mount(share)
+            let mounted = manager.isMounted(share)
             DispatchQueue.main.async {
                 self?.shareStates[share.id] = mounted
                 self?.refreshUI()
